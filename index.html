@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>St. Joseph Rush: Dhaka Street Edition</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            background: #0f172a;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #game-wrapper {
+            width: 100%;
+            max-width: 600px;
+            height: 450px;
+            background: #1e293b;
+            position: relative;
+            overflow: hidden;
+            border: 4px solid #10b981;
+            border-radius: 12px;
+            box-shadow: 0 0 25px rgba(16, 185, 129, 0.4);
+        }
+        canvas {
+            display: block;
+            background: linear-gradient(to bottom, #38bdf8, #fef08a);
+        }
+        .hud-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 16px;
+            font-weight: bold;
+            color: #000;
+            text-shadow: 1px 1px #fff;
+            pointer-events: none;
+        }
+        .dialogue-box {
+            position: absolute;
+            bottom: 70px;
+            left: 20px;
+            right: 20px;
+            background: rgba(15, 23, 42, 0.9);
+            border: 2px solid #f59e0b;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #fde047;
+            text-align: center;
+            min-height: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .controls-bar {
+            margin-top: 15px;
+            display: flex;
+            gap: 15px;
+        }
+        .action-btn {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px #047857;
+            transition: 0.1s;
+        }
+        .action-btn:active {
+            transform: translateY(4px);
+            box-shadow: none;
+        }
+    </style>
+</head>
+<body>
+
+    <h3 style="margin-bottom: 8px; color: #f59e0b;">St. Joseph Rush: Farmgate to Mohammadpur</h3>
+    
+    <div id="game-wrapper">
+        <div class="hud-panel">
+            <span id="distance-meter">দূরত্ব: 0m / 500m</span>
+            <span id="clock-timer">⏰ ৭:০০ AM</span>
+        </div>
+        
+        <canvas id="dhakaCanvas" width="600" height="450"></canvas>
+        
+        <div class="dialogue-box" id="dialogue-display">
+            মিশন শুরু! ফার্মগেট জ্যাম থেকে বেঁচে সেন্ট যোসেফ গেইটে পৌঁছাও! (Space বা Jump টেপো)
+        </div>
+    </div>
+
+    <div class="controls-bar">
+        <button class="action-btn" onclick="triggerJump()">🏃‍♂️ লাফ দাও (Jump)</button>
+        <button class="action-btn" style="background: #ef4444; box-shadow: 0 4px #b91c1c;" onclick="triggerScienceTalk()">🧪 সায়েন্স টক (Science Flex)</button>
+    </div>
+
+<script>
+    const canvas = document.getElementById("dhakaCanvas");
+    const ctx = canvas.getContext("2d");
+
+    let distance = 0;
+    let isGameOver = false;
+    let gameSpeed = 3.5;
+    let frameCounter = 0;
+
+    // Student (Josephite)
+    let student = {
+        x: 60,
+        y: 310,
+        width: 32,
+        height: 55,
+        yVelocity: 0,
+        jumpPower: -11,
+        gravity: 0.55,
+        isGrounded: true
+    };
+
+    let obstacles = [];
+    let currentDialogueIndex = 0;
+
+    const funnyDialogues = [
+        "🚌 বাস হেলপার: এই মিয়া উঠবেন নাকি ঝুলবেন? ফার্মগেট পার হবি কেমনে?",
+        "💡 Josephite (সাদ): 'মামা, মোমেন্টাম কনজারভেশন অনুযায়ী বাসের ভরবেগ বেশি হলে আমার কাইনেটিক এনার্জি বাড়িয়ে উঠতে হবে!'",
+        "🛺 রিকশাওয়ালা: ১০০ টেকা ভাড়া! জ্যামের মধে ফাজলামি করিস না!",
+        "💡 Josephite (সাদ): 'ঘর্ষণ বল (Friction) কমান ভাই, প্যাসকালের সূত্র মানলে ৫০ টাকার বেশি দেওয়া ইলিগ্যাল!'",
+        "👮 সার্জেন্ট: এই লেগুনা ডাইনে গেল কেন? কেস খাইবি কিন্তু!",
+        "💡 Josephite (সাদ): 'স্যার, আইনস্টাইনের রিলেটিভিটি বলছে আপনার ঘড়ি স্লো চলছে, আমার কলেজে ঢোকার টাইম পার হয়ে যাচ্ছে!'"
+    ];
+
+    function updateDialogue() {
+        const box = document.getElementById("dialogue-display");
+        box.innerText = funnyDialogues[currentDialogueIndex];
+        currentDialogueIndex = (currentDialogueIndex + 1) % funnyDialogues.length;
+    }
+
+    function triggerJump() {
+        if (student.isGrounded && !isGameOver) {
+            student.yVelocity = student.jumpPower;
+            student.isGrounded = false;
+        }
+        if (isGameOver) {
+            restartGame();
+        }
+    }
+
+    function triggerScienceTalk() {
+        if (!isGameOver) {
+            distance += 25; // Extra boost from science flexing
+            updateDialogue();
+        }
+    }
+
+    window.addEventListener("keydown", (e) => {
+        if (e.code === "Space" || e.code === "ArrowUp") {
+            triggerJump();
+        }
+    });
+
+    function spawnObstacle() {
+        let types = ["rickshaw", "leguna", "bus"];
+        let type = types[Math.floor(Math.random() * types.length)];
+        
+        obstacles.push({
+            x: canvas.width,
+            y: 315,
+            width: type === "bus" ? 60 : 40,
+            height: type === "bus" ? 50 : 45,
+            type: type,
+            color: type === "rickshaw" ? "#f97316" : (type === "leguna" ? "#ef4444" : "#3b82f6")
+        });
+    }
+
+    function gameLoop() {
+        if (isGameOver) return;
+
+        // Clear Screen
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw Background (Dhaka Street Buildings & Sky)
+        ctx.fillStyle = "#bae6fd";
+        ctx.fillRect(0, 0, canvas.width, 250);
+        
+        // Buildings silhouette
+        ctx.fillStyle = "#64748b";
+        ctx.fillRect(50, 100, 80, 150);
+        ctx.fillRect(160, 70, 90, 180);
+        ctx.fillRect(290, 120, 100, 130);
+        ctx.fillRect(420, 80, 110, 170);
+
+        // Road
+        ctx.fillStyle = "#334155";
+        ctx.fillRect(0, 340, canvas.width, 110);
+        
+        // Road Lane markings
+        ctx.strokeStyle = "#fbbf24";
+        ctx.lineWidth = 3;
+        ctx.setLineDash([15, 15]);
+        ctx.beginPath();
+        ctx.moveTo(0, 395);
+        ctx.lineTo(canvas.width, 395);
+        ctx.stroke();
+
+        // Student Physics
+        student.yVelocity += student.gravity;
+        student.y += student.yVelocity;
+
+        if (student.y > 310) {
+            student.y = 310;
+            student.yVelocity = 0;
+            student.isGrounded = true;
+        }
+
+        // Draw Student (Josephite)
+        ctx.fillStyle = "#0284c7"; // Uniform/Shirt color
+        ctx.fillRect(student.x, student.y, student.width, student.height);
+        // Head
+        ctx.fillStyle = "#fcd34d";
+        ctx.beginPath();
+        ctx.arc(student.x + 16, student.y - 8, 9, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Obstacles Management
+        if (frameCounter % 110 === 0) {
+            spawnObstacle();
+            if (Math.random() > 0.5) {
+                updateDialogue();
+            }
+        }
+
+        obstacles.forEach((obs, index) => {
+            obs.x -= gameSpeed;
+
+            // Draw Obstacle
+            ctx.fillStyle = obs.color;
+            ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+
+            // Collision Detection
+            if (
+                student.x < obs.x + obs.width &&
+                student.x + student.width > obs.x &&
+                student.y < obs.y + obs.height &&
+                student.y + student.height > obs.y
+            ) {
+                isGameOver = true;
+            }
+
+            // Remove off-screen obstacles
+            if (obs.x + obs.width < 0) {
+                obstacles.splice(index, 1);
+            }
+        });
+
+        frameCounter++;
+        distance += 1;
+
+        // HUD updates
+        document.getElementById("distance-meter").innerText = `দূরত্ব: ${distance}m / 500m`;
+        
+        // Time logic
+        let minutes = Math.min(50, Math.floor(distance / 10));
+        document.getElementById("clock-timer").innerText = `⏰ ৭:${(10 + minutes < 60 ? 10 + minutes : 50)} AM`;
+
+        // Win Condition
+        if (distance >= 500) {
+            isGameOver = true;
+            document.getElementById("dialogue-display").innerText = "🎉 অভিনন্দন! ৭:৫০ এর মধ্যে সেন্ট যোসেফ গেইট পার হয়ে ক্লাসে ঢুকে গেছ!";
+        }
+
+        if (!isGameOver) {
+            requestAnimationFrame(gameLoop);
+        } else {
+            drawGameOverScreen();
+        }
+    }
+
+    function drawGameOverScreen() {
+        ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = distance >= 500 ? "#10b981" : "#ef4444";
+        ctx.font = "bold 26px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(distance >= 500 ? "MISSION SUCCESS! 🏆" : "LATE HOYE GESE! 💀", canvas.width / 2, canvas.height / 2 - 20);
+
+        ctx.fillStyle = "#fff";
+        ctx.font = "15px Arial";
+        ctx.fillText(distance >= 500 ? "তুমি ঠিক সময়ে কলেজে পৌঁছে গেছ!" : "গেট বন্ধ! রিকশার জ্যামে আটকে গেছিলে।", canvas.width / 2, canvas.height / 2 + 15);
+        
+        ctx.fillStyle = "#f59e0b";
+        ctx.font = "bold 16px Arial";
+        ctx.fillText("আবার খেলতে 'Jump' বাটন টেপো", canvas.width / 2, canvas.height / 2 + 55);
+    }
+
+    function restartGame() {
+        isGameOver = false;
+        distance = 0;
+        frameCounter = 0;
+        obstacles = [];
+        student.y = 310;
+        student.yVelocity = 0;
+        currentDialogueIndex = 0;
+        document.getElementById("dialogue-display").innerText = "আবার দৌড় শুরু! চলো যোসেফাইট!";
+        gameLoop();
+    }
+
+    gameLoop();
+</script>
+
+</body>
+</html>
